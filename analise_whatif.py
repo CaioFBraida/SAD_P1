@@ -1,21 +1,5 @@
-"""
-=============================================================
-  ANÁLISE WHAT-IF – SIMULAÇÃO DE LUCRO EM LOJA DE VAREJO
-=============================================================
-
-Rode sem argumentos para o menu interativo:
-  python analise_whatif.py
-
-Ou passe direto no terminal:
-  python analise_whatif.py --global 10
-  python analise_whatif.py --global -15
-  python analise_whatif.py --auto
-  python analise_whatif.py --lista
-"""
-
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import numpy as np
 import sys
 import os
@@ -24,9 +8,8 @@ CSV_PATH      = "produtos.csv"
 ALERTA_MARGEM = 30.0
 LINHA         = "─" * 70
 
-# ──────────────────────────────────────────────────
+
 #  DADOS
-# ──────────────────────────────────────────────────
 def carregar():
     if not os.path.exists(CSV_PATH):
         print(f"\n[ERRO] '{CSV_PATH}' não encontrado na mesma pasta.")
@@ -45,9 +28,7 @@ def calcular_cenario(df, variacoes):
     r["margem_nova"] = ((r["preco_novo"] - r["custo_unitario"]) / r["preco_novo"] * 100).round(1)
     return r
 
-# ──────────────────────────────────────────────────
 #  IMPRESSÃO
-# ──────────────────────────────────────────────────
 def imprimir_base(df):
     total = df["lucro_base"].sum()
     print(f"\n{'SITUAÇÃO ATUAL – PREÇOS BASE':^70}")
@@ -80,9 +61,7 @@ def imprimir_cenario(res, titulo):
     print(f"  {'LUCRO TOTAL NOVO':>57}  R$ {novo:>10,.2f}")
     print(f"  {'VARIAÇÃO VS BASE':>57}  {ind_tot} R$ {delta:>+10,.2f}  ({pct:+.1f}%)")
 
-# ──────────────────────────────────────────────────
 #  RECOMENDAÇÃO FINAL
-# ──────────────────────────────────────────────────
 def recomendar_melhor(df, historico):
     base = df["lucro_base"].sum()
 
@@ -134,9 +113,7 @@ def recomendar_melhor(df, historico):
     print(f"\n{'═'*70}\n")
     return melhor
 
-# ──────────────────────────────────────────────────
 #  GRÁFICOS
-# ──────────────────────────────────────────────────
 def plotar(df, historico):
     melhor_res  = max(historico, key=lambda h: h["lucro"])["res"]
     melhor_nome = max(historico, key=lambda h: h["lucro"])["label"]
@@ -144,11 +121,6 @@ def plotar(df, historico):
 
     COR = {"pos": "#2ecc71", "neg": "#e74c3c", "base": "#3498db",
            "dest": "#f39c12", "text": "#eeeeee", "panel": "#1a1a2e"}
-
-    fig = plt.figure(figsize=(16, 9), facecolor="#0f0f1a")
-    fig.suptitle("ANÁLISE WHAT-IF — SIMULAÇÃO DE LUCRO | LOJA DE VAREJO",
-                 fontsize=13, fontweight="bold", color="white", y=0.98)
-    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.52, wspace=0.35)
 
     def estilo(ax):
         ax.set_facecolor(COR["panel"])
@@ -162,8 +134,10 @@ def plotar(df, historico):
 
     fmt_r = plt.FuncFormatter(lambda v, _: f"R${v:,.0f}")
 
-    # ── 1. Lucro base vs melhor cenário por produto ──
-    ax1 = fig.add_subplot(gs[0, :])
+    #  GRÁFICO 1: Lucro por Produto: Base vs Melhor Cenário
+    fig1, ax1 = plt.subplots(figsize=(12, 6), facecolor="#0f0f1a")
+    fig1.suptitle("Lucro por Produto: Base vs Melhor Cenário",
+                  fontsize=12, fontweight="bold", color="white", y=0.98)
     res = melhor_res
     x   = np.arange(len(res))
     w   = 0.38
@@ -172,7 +146,6 @@ def plotar(df, historico):
             color=[COR["pos"] if d >= 0 else COR["neg"] for d in res["delta"]], alpha=0.9)
     ax1.set_xticks(x)
     ax1.set_xticklabels(res["produto"], rotation=28, ha="right", fontsize=7.5)
-    ax1.set_title("Lucro por Produto: Base vs Melhor Cenário", fontsize=10)
     ax1.set_ylabel("Lucro (R$)")
     ax1.yaxis.set_major_formatter(fmt_r)
     ax1.legend(fontsize=8, facecolor="#1a1a2e", labelcolor=COR["text"])
@@ -183,20 +156,29 @@ def plotar(df, historico):
     ax1.text(0.14, 0.95, f"Melhor cenário: R${novo_t:,.0f}  ({(novo_t-base)/base*100:+.1f}%)",
              transform=ax1.transAxes, fontsize=8.5, color=cor_t, va="top")
     estilo(ax1)
+    nome1 = "lucro_base_vs_melhor_cenario.png"
+    fig1.savefig(nome1, dpi=120, bbox_inches="tight", facecolor="#0f0f1a")
+    plt.close(fig1)
 
-    # ── 2. Δ Lucro do melhor cenário por produto ──
-    ax2 = fig.add_subplot(gs[1, 0])
+    #  GRÁFICO 2: Variação do Lucro por Produto (Melhor Cenário vs Base)
+    fig2, ax2 = plt.subplots(figsize=(10, 6), facecolor="#0f0f1a")
+    fig2.suptitle("Variação do Lucro por Produto (Melhor Cenário vs Base)",
+                  fontsize=12, fontweight="bold", color="white", y=0.98)
     cors = [COR["pos"] if d >= 0 else COR["neg"] for d in res["delta"]]
     ax2.barh(res["produto"], res["delta"], color=cors, alpha=0.9)
     ax2.axvline(0, color=COR["text"], linewidth=0.7)
-    ax2.set_title("Δ Lucro por Produto (Melhor Cenário vs Base)", fontsize=9)
     ax2.set_xlabel("Variação de Lucro (R$)")
     ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"R${v:+,.0f}"))
     ax2.tick_params(axis="y", labelsize=7.5)
     estilo(ax2)
+    nome2 = "variacao_lucro_por_produto.png"
+    fig2.savefig(nome2, dpi=120, bbox_inches="tight", facecolor="#0f0f1a")
+    plt.close(fig2)
 
-    # ── 3. Comparativo de todos os cenários ──
-    ax3 = fig.add_subplot(gs[1, 1])
+    #  GRÁFICO 3: Comparativo de todos os cenários
+    fig3, ax3 = plt.subplots(figsize=(10, 6), facecolor="#0f0f1a")
+    fig3.suptitle("Comparativo: Lucro por Cenário Simulado",
+                  fontsize=12, fontweight="bold", color="white", y=0.98)
     nomes  = [h["label"][:25] for h in historico]
     lucros = [h["lucro"] for h in historico]
     cors3  = [COR["dest"] if l == max(lucros) else
@@ -206,7 +188,6 @@ def plotar(df, historico):
                 label=f"Base: R${base:,.0f}")
     ax3.set_xticks(range(len(historico)))
     ax3.set_xticklabels(nomes, rotation=20, ha="right", fontsize=7.5)
-    ax3.set_title("Comparativo: Lucro por Cenário Simulado", fontsize=9)
     ax3.set_ylabel("Lucro Total (R$)")
     ax3.yaxis.set_major_formatter(fmt_r)
     ax3.legend(fontsize=8, facecolor="#1a1a2e", labelcolor=COR["text"])
@@ -214,15 +195,62 @@ def plotar(df, historico):
         ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.005,
                  f"R${val:,.0f}", ha="center", va="bottom", fontsize=6.5, color=COR["text"])
     estilo(ax3)
+    nome3 = "comparativo_cenarios.png"
+    fig3.savefig(nome3, dpi=120, bbox_inches="tight", facecolor="#0f0f1a")
+    plt.close(fig3)
 
-    plt.savefig("grafico_whatif.png", dpi=120, bbox_inches="tight", facecolor="#0f0f1a")
-    plt.show(block=False)
-    plt.pause(0.1)
-    print("  [Gráfico salvo em grafico_whatif.png]")
+    #  GRÁFICO COMBINADO
+    import matplotlib.gridspec as gridspec
+    fig_all = plt.figure(figsize=(16, 9), facecolor="#0f0f1a")
+    fig_all.suptitle("ANÁLISE WHAT-IF — SIMULAÇÃO DE LUCRO | LOJA DE VAREJO",
+                     fontsize=13, fontweight="bold", color="white", y=0.98)
+    gs = gridspec.GridSpec(2, 2, figure=fig_all, hspace=0.52, wspace=0.35)
 
-# ──────────────────────────────────────────────────
+    axc1 = fig_all.add_subplot(gs[0, :])
+    axc1.bar(x - w/2, res["lucro_base"], w, label="Base", color=COR["base"], alpha=0.75)
+    axc1.bar(x + w/2, res["lucro_novo"], w, label=f"Melhor ({melhor_nome})",
+             color=[COR["pos"] if d >= 0 else COR["neg"] for d in res["delta"]], alpha=0.9)
+    axc1.set_xticks(x)
+    axc1.set_xticklabels(res["produto"], rotation=28, ha="right", fontsize=7.5)
+    axc1.set_title("Lucro por Produto: Base vs Melhor Cenário", fontsize=10)
+    axc1.set_ylabel("Lucro (R$)")
+    axc1.yaxis.set_major_formatter(fmt_r)
+    axc1.legend(fontsize=8, facecolor="#1a1a2e", labelcolor=COR["text"])
+    axc1.text(0.01, 0.95, f"Base: R${base:,.0f}", transform=axc1.transAxes,
+              fontsize=8.5, color=COR["base"], va="top")
+    axc1.text(0.14, 0.95, f"Melhor cenário: R${novo_t:,.0f}  ({(novo_t-base)/base*100:+.1f}%)",
+              transform=axc1.transAxes, fontsize=8.5, color=cor_t, va="top")
+    estilo(axc1)
+
+    axc2 = fig_all.add_subplot(gs[1, 0])
+    axc2.barh(res["produto"], res["delta"], color=cors, alpha=0.9)
+    axc2.axvline(0, color=COR["text"], linewidth=0.7)
+    axc2.set_title("Δ Lucro por Produto (Melhor Cenário vs Base)", fontsize=9)
+    axc2.set_xlabel("Variação de Lucro (R$)")
+    axc2.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"R${v:+,.0f}"))
+    axc2.tick_params(axis="y", labelsize=7.5)
+    estilo(axc2)
+
+    axc3 = fig_all.add_subplot(gs[1, 1])
+    bars_c = axc3.bar(range(len(historico)), lucros, color=cors3, alpha=0.9)
+    axc3.axhline(base, color=COR["base"], linestyle="--", linewidth=1.2,
+                 label=f"Base: R${base:,.0f}")
+    axc3.set_xticks(range(len(historico)))
+    axc3.set_xticklabels(nomes, rotation=20, ha="right", fontsize=7.5)
+    axc3.set_title("Comparativo: Lucro por Cenário Simulado", fontsize=9)
+    axc3.set_ylabel("Lucro Total (R$)")
+    axc3.yaxis.set_major_formatter(fmt_r)
+    axc3.legend(fontsize=8, facecolor="#1a1a2e", labelcolor=COR["text"])
+    for bar, val in zip(bars_c, lucros):
+        axc3.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.005,
+                  f"R${val:,.0f}", ha="center", va="bottom", fontsize=6.5, color=COR["text"])
+    estilo(axc3)
+
+    nome_combinado = "painel_geral.png"
+    fig_all.savefig(nome_combinado, dpi=120, bbox_inches="tight", facecolor="#0f0f1a")
+    plt.close(fig_all)
+
 #  CENÁRIOS AUTOMÁTICOS PRÉ-DEFINIDOS
-# ──────────────────────────────────────────────────
 def cenarios_automaticos(df):
     """
     Retorna uma lista de cenários pré-configurados baseados em regras
@@ -230,7 +258,7 @@ def cenarios_automaticos(df):
     """
     cenarios = []
 
-    # ── auxiliares ──
+    # auxiliares
     df_sorted_qtd = df.sort_values("quantidade_vendida", ascending=False)
     top5_volume   = df_sorted_qtd.head(5)["produto"].tolist()
     bot5_volume   = df_sorted_qtd.tail(5)["produto"].tolist()
@@ -246,12 +274,12 @@ def cenarios_automaticos(df):
     cenarios.append({"label": "Otimista (+10% marg alta, +5% demais)",
                      "variacoes": vm_otimista})
 
-    # ── 2. Pessimista: redução generalizada (crise/recessão) ──
+    # 2. Pessimista: redução generalizada (crise/recessão)
     vm_pessimista = {p: -15.0 for p in df["produto"]}
     cenarios.append({"label": "Pessimista (-15% global)",
                      "variacoes": vm_pessimista})
 
-    # ── 3. Foco em Volume: desconto nos campeões de venda, compensa no resto ──
+    # 3. Foco em Volume: desconto nos campeões de venda, compensa no resto
     vm_volume = {}
     for _, r in df.iterrows():
         if r["produto"] in top5_volume:
@@ -261,7 +289,7 @@ def cenarios_automaticos(df):
     cenarios.append({"label": "Foco Volume (-10% Top5, +8% demais)",
                      "variacoes": vm_volume})
 
-    # ── 4. Premium: sobe preço nos itens de nicho (baixo volume, margem alta) ──
+    # 4. Premium: sobe preço nos itens de nicho (baixo volume, margem alta)
     vm_premium = {p: 0.0 for p in df["produto"]}
     for p in bot5_volume:
         vm_premium[p] = +20.0
@@ -271,9 +299,7 @@ def cenarios_automaticos(df):
     return cenarios
 
 
-# ──────────────────────────────────────────────────
 #  MODO INTERATIVO
-# ──────────────────────────────────────────────────
 def modo_interativo(df):
     plt.ion()
     historico = []
@@ -373,9 +399,8 @@ def modo_interativo(df):
 
         input("\n  [Enter para continuar...]\n")
 
-# ──────────────────────────────────────────────────
-#  LINHA DE COMANDO
-# ──────────────────────────────────────────────────
+
+#  MAIN
 def main():
     args = sys.argv[1:]
     df   = carregar()
