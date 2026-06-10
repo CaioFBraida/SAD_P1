@@ -9,6 +9,7 @@ Rode sem argumentos para o menu interativo:
 Ou passe direto no terminal:
   python analise_whatif.py --global 10
   python analise_whatif.py --global -15
+  python analise_whatif.py --auto
   python analise_whatif.py --lista
 """
 
@@ -220,6 +221,57 @@ def plotar(df, historico):
     print("  [Gráfico salvo em grafico_whatif.png]")
 
 # ──────────────────────────────────────────────────
+#  CENÁRIOS AUTOMÁTICOS PRÉ-DEFINIDOS
+# ──────────────────────────────────────────────────
+def cenarios_automaticos(df):
+    """
+    Retorna uma lista de cenários pré-configurados baseados em regras
+    de negócio sobre os dados atuais.
+    """
+    cenarios = []
+
+    # ── auxiliares ──
+    df_sorted_qtd = df.sort_values("quantidade_vendida", ascending=False)
+    top5_volume   = df_sorted_qtd.head(5)["produto"].tolist()
+    bot5_volume   = df_sorted_qtd.tail(5)["produto"].tolist()
+    media_margem  = df["margem_base"].mean()
+
+    # ── 1. Otimista: sobe preço em margens altas, leve ajuste nas baixas ──
+    vm_otimista = {}
+    for _, r in df.iterrows():
+        if r["margem_base"] >= media_margem:
+            vm_otimista[r["produto"]] = +10.0
+        else:
+            vm_otimista[r["produto"]] = +5.0
+    cenarios.append({"label": "Otimista (+10% marg alta, +5% demais)",
+                     "variacoes": vm_otimista})
+
+    # ── 2. Pessimista: redução generalizada (crise/recessão) ──
+    vm_pessimista = {p: -15.0 for p in df["produto"]}
+    cenarios.append({"label": "Pessimista (-15% global)",
+                     "variacoes": vm_pessimista})
+
+    # ── 3. Foco em Volume: desconto nos campeões de venda, compensa no resto ──
+    vm_volume = {}
+    for _, r in df.iterrows():
+        if r["produto"] in top5_volume:
+            vm_volume[r["produto"]] = -10.0
+        else:
+            vm_volume[r["produto"]] = +8.0
+    cenarios.append({"label": "Foco Volume (-10% Top5, +8% demais)",
+                     "variacoes": vm_volume})
+
+    # ── 4. Premium: sobe preço nos itens de nicho (baixo volume, margem alta) ──
+    vm_premium = {p: 0.0 for p in df["produto"]}
+    for p in bot5_volume:
+        vm_premium[p] = +20.0
+    cenarios.append({"label": "Premium (+20% nos 5 de menor volume)",
+                     "variacoes": vm_premium})
+
+    return cenarios
+
+
+# ──────────────────────────────────────────────────
 #  MODO INTERATIVO
 # ──────────────────────────────────────────────────
 def modo_interativo(df):
@@ -233,6 +285,7 @@ def modo_interativo(df):
         print(LINHA)
         print("  1  Aplicar variação % global em todos os produtos")
         print("  2  Aplicar variação % individual por produto")
+        print("  3  Executar cenários automáticos pré-definidos")
         if n > 0:
             print(f"  R  Ver recomendação ({n} cenário{'s' if n>1 else ''} simulado{'s' if n>1 else ''})")
         print("  0  Sair")
@@ -275,6 +328,42 @@ def modo_interativo(df):
                                "lucro": res["lucro_novo"].sum(), "res": res})
             print(f"\n  Cenário '{label}' registrado. Total acumulado: {len(historico)} cenário(s).")
 
+        elif opcao == "3":
+            auto = cenarios_automaticos(df)
+            for i, c in enumerate(auto):
+                print(f"  {i+1}  {c['label']}")
+            print(f"  A  Executar TODOS de uma vez")
+            print(f"  0  Voltar")
+            print()
+            sub = input("  Escolha o cenário (1-4, A ou 0): ").strip().upper()
+
+            if sub == "0":
+                print("  Voltando ao menu principal.")
+            elif sub == "A":
+                for c in auto:
+                    res   = calcular_cenario(df, c["variacoes"])
+                    label = c["label"]
+                    c["lucro"] = res["lucro_novo"].sum()
+                    c["res"]   = res
+                    imprimir_cenario(res, f"CENÁRIO: {label}")
+                    historico.append({"label": label, "variacoes": c["variacoes"],
+                                       "lucro": c["lucro"], "res": res})
+                print(f"\n  {len(auto)} cenários automáticos registrados. "
+                      f"Total acumulado: {len(historico)} cenário(s).")
+            elif sub in ("1", "2", "3", "4"):
+                idx  = int(sub) - 1
+                c    = auto[idx]
+                res  = calcular_cenario(df, c["variacoes"])
+                c["lucro"] = res["lucro_novo"].sum()
+                c["res"]   = res
+                imprimir_cenario(res, f"CENÁRIO: {c['label']}")
+                historico.append({"label": c["label"], "variacoes": c["variacoes"],
+                                   "lucro": c["lucro"], "res": res})
+                print(f"\n  Cenário '{c['label']}' registrado. "
+                      f"Total acumulado: {len(historico)} cenário(s).")
+            else:
+                print("  [ERRO] Escolha inválida. Voltando ao menu.")
+
         elif opcao == "R" and historico:
             recomendar_melhor(df, historico)
             plotar(df, historico)
@@ -303,12 +392,30 @@ def main():
 
     if "--global" in args:
         idx = args.index("--global")
+        if idx + 1 >= len(args):
+            print("[ERRO] --global requer um valor percentual. Ex: --global 10")
+            return
         v   = float(args[idx + 1])
         vm  = {p: v for p in df["produto"]}
         res = calcular_cenario(df, vm)
         imprimir_cenario(res, f"CENÁRIO: {v:+.1f}% EM TODOS OS PRODUTOS")
         historico = [{"label": f"Global {v:+.0f}%", "variacoes": vm,
                       "lucro": res["lucro_novo"].sum(), "res": res}]
+        recomendar_melhor(df, historico)
+        plotar(df, historico)
+        plt.show()
+        return
+
+    if "--auto" in args:
+        auto = cenarios_automaticos(df)
+        historico = []
+        for c in auto:
+            res = calcular_cenario(df, c["variacoes"])
+            c["lucro"] = res["lucro_novo"].sum()
+            c["res"]   = res
+            imprimir_cenario(res, f"CENÁRIO: {c['label']}")
+            historico.append({"label": c["label"], "variacoes": c["variacoes"],
+                               "lucro": c["lucro"], "res": res})
         recomendar_melhor(df, historico)
         plotar(df, historico)
         plt.show()
